@@ -10,7 +10,9 @@ interface IProps {
 
 interface PerspectiveViewerElement extends HTMLElement {
   load: (table: Table) => void,
+  update: (data: any[]) => void,
 }
+
 class Graph extends Component<IProps, {}> {
   table: Table | undefined;
 
@@ -20,13 +22,16 @@ class Graph extends Component<IProps, {}> {
 
   componentDidMount() {
     // Get element from the DOM.
-    const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+    const elem = document.getElementsByTagName('perspective-viewer')[0] as PerspectiveViewerElement;
 
     const schema = {
-      stock: 'string',
-      top_ask_price: 'float',
-      top_bid_price: 'float',
+      price_abc: 'float',
+      price_def: 'float',
+      ratio: 'float',
       timestamp: 'date',
+      upper_bound: 'float',
+      lower_bound: 'float',
+      trigger_alert: 'float',
     };
 
     if (window.perspective && window.perspective.worker()) {
@@ -36,14 +41,16 @@ class Graph extends Component<IProps, {}> {
       // Load the `table` in the `<perspective-viewer>` DOM reference.
       elem.load(this.table);
       elem.setAttribute('view', 'y_line');
-      elem.setAttribute('column-pivots', '["stock"]');
       elem.setAttribute('row-pivots', '["timestamp"]');
-      elem.setAttribute('columns', '["top_ask_price"]');
+      elem.setAttribute('columns', '["ratio", "upper_bound", "lower_bound", "trigger_alert"]');
       elem.setAttribute('aggregates', JSON.stringify({
-        stock: 'distinctcount',
-        top_ask_price: 'avg',
-        top_bid_price: 'avg',
+        price_abc: 'avg',
+        price_def: 'avg',
+        ratio: 'avg',
         timestamp: 'distinct count',
+        upper_bound: 'avg',
+        lower_bound: 'avg',
+        trigger_alert: 'avg',
       }));
     }
   }
@@ -51,7 +58,24 @@ class Graph extends Component<IProps, {}> {
   componentDidUpdate() {
     if (this.table) {
       this.table.update(
-        DataManipulator.generateRow(this.props.data),
+        this.props.data.map((el: ServerRespond) => {
+          const priceABC = (el.top_ask && el.top_ask.price) || 0;
+          const priceDEF = (el.top_bid && el.top_bid.price) || 0;
+          const ratio = priceABC / priceDEF;
+          const upperBound = 1.1;  // Example value, adjust as needed
+          const lowerBound = 0.9;  // Example value, adjust as needed
+          const triggerAlert = (ratio > upperBound || ratio < lowerBound) ? ratio : undefined;
+
+          return {
+            price_abc: priceABC,
+            price_def: priceDEF,
+            ratio,
+            timestamp: new Date(el.timestamp),
+            upper_bound: upperBound,
+            lower_bound: lowerBound,
+            trigger_alert: triggerAlert,
+          };
+        })
       );
     }
   }
